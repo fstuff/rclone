@@ -787,16 +787,64 @@ func (f *Fs) Mkdir(dir string) error {
 		Method: "POST",
 		Path:   "/b2_create_bucket",
 	}
-	var request = api.CreateBucketRequest{
-		AccountID: f.info.AccountID,
-		Name:      f.bucket,
-		Type:      "allPrivate",
+
+	var request = api.ListBucketsRequest{
+	    	AccountID: f.info.AccountID,
+		BucketName: f.bucket,
 	}
-	var response api.Bucket
+
+	var listResponse api.ListBucketsResponse
+
+	foundBucket := false 
+
+	//var request = api.CreateBucketRequest{
+	//	AccountID: f.info.AccountID,
+	//	Name:      f.bucket,
+	//	Type:      "allPrivate",
+	//}
+	//var response api.Bucket
 	err := f.pacer.Call(func() (bool, error) {
-		resp, err := f.srv.CallJSON(&opts, &request, &response)
+		resp, err := f.srv.CallJSON(&opts, &request, &listResponse)
 		return f.shouldRetry(resp, err)
 	})
+
+	if err != nil {
+	    _, getBucketErr := f.getBucketID()
+
+	    fs.Debugf(f, "Error checking bucket exists: %v", getBucketErr)
+	    return errors.Wrap(err, "failed to create bucket")
+        }  else if len(listResponse.Buckets) > 0 {
+
+	     buckets := listResponse.Buckets
+
+	     // test for name of bucket
+	     for i := 0; i < len(buckets); i++ {
+	     	 b := buckets[i]
+		 
+		 if b.Name == f.bucket {
+		    foundBucket = true
+		    break
+	     	 }
+	      }
+	} else {
+	     foundBucket = false
+	}
+	
+
+	if foundBucket == false {
+
+	var request = api.CreateBucketRequest{
+              AccountID: f.info.AccountID,
+              Name:      f.bucket,
+              Type:      "allPrivate",
+        }
+        
+	var response api.Bucket
+        err := f.pacer.Call(func() (bool, error) {
+                resp, err := f.srv.CallJSON(&opts, &request, &response)
+                return f.shouldRetry(resp, err)
+        })
+
 	if err != nil {
 		if apiErr, ok := err.(*api.Error); ok {
 			if apiErr.Code == "duplicate_bucket_name" {
@@ -814,11 +862,18 @@ func (f *Fs) Mkdir(dir string) error {
 			}
 		}
 		return errors.Wrap(err, "failed to create bucket")
+	} else {
+	     
+	     	f.setBucketID(response.ID)
+		f.bucketOK = true
+		return nil
 	}
-	f.setBucketID(response.ID)
-	f.bucketOK = true
-	return nil
+    }
+    // if we get to here it means foundBucket == true, everything is good.
+    return nil
 }
+
+
 
 // Rmdir deletes the bucket if the fs is at the root
 //
