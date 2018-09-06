@@ -783,12 +783,13 @@ func (f *Fs) Mkdir(dir string) error {
 	if f.bucketOK {
 		return nil
 	}
-	opts := rest.Opts{
+
+	listOpts := rest.Opts{
 		Method: "POST",
-		Path:   "/b2_create_bucket",
+		Path:   "/b2_list_buckets",
 	}
 
-	var request = api.ListBucketsRequest{
+	var listRequest = api.ListBucketsRequest{
 	    	AccountID: f.info.AccountID,
 		BucketName: f.bucket,
 	}
@@ -797,14 +798,8 @@ func (f *Fs) Mkdir(dir string) error {
 
 	foundBucket := false 
 
-	//var request = api.CreateBucketRequest{
-	//	AccountID: f.info.AccountID,
-	//	Name:      f.bucket,
-	//	Type:      "allPrivate",
-	//}
-	//var response api.Bucket
 	err := f.pacer.Call(func() (bool, error) {
-		resp, err := f.srv.CallJSON(&opts, &request, &listResponse)
+		resp, err := f.srv.CallJSON(&listOpts, &listRequest, &listResponse)
 		return f.shouldRetry(resp, err)
 	})
 
@@ -833,15 +828,21 @@ func (f *Fs) Mkdir(dir string) error {
 
 	if foundBucket == false {
 
-	var request = api.CreateBucketRequest{
+	createOpts := rest.Opts{
+                Method: "POST",
+                Path:   "/b2_create_bucket",
+        }
+
+	var createRequest = api.CreateBucketRequest{
               AccountID: f.info.AccountID,
               Name:      f.bucket,
               Type:      "allPrivate",
         }
         
-	var response api.Bucket
+	var createResponse api.Bucket
+
         err := f.pacer.Call(func() (bool, error) {
-                resp, err := f.srv.CallJSON(&opts, &request, &response)
+                resp, err := f.srv.CallJSON(&createOpts, &createRequest, &createResponse)
                 return f.shouldRetry(resp, err)
         })
 
@@ -864,7 +865,7 @@ func (f *Fs) Mkdir(dir string) error {
 		return errors.Wrap(err, "failed to create bucket")
 	} else {
 	     
-	     	f.setBucketID(response.ID)
+	     	f.setBucketID(createResponse.ID)
 		f.bucketOK = true
 		return nil
 	}
